@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MORPHOS — La Imagen Viva</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@300;400;600;900&family=EB+Garamond:ital@1&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #000; overflow: hidden; cursor: none; font-family: 'Orbitron', sans-serif; }
+canvas { display: block; position: fixed; inset: 0; }
+
+/* Custom cursor */
+#cursor {
+  position: fixed;
+  width: 16px; height: 16px;
+  border: 1px solid rgba(255,255,255,0.6);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 100;
+  transform: translate(-50%, -50%);
+  transition: border-color 0.3s, transform 0.1s;
+  mix-blend-mode: difference;
+}
+#cursor.attract { border-color: #00FFFF; transform: translate(-50%,-50%) scale(1.8); }
+#cursor.repel   { border-color: #FF4444; transform: translate(-50%,-50%) scale(1.8); }
+
+/* State label */
+#state-display {
+  position: fixed;
+  top: 28px; left: 32px;
+  z-index: 20;
+  pointer-events: none;
+}
+.state-label {
+  font-size: 9px;
+  letter-spacing: 0.4em;
+  color: rgba(255,255,255,0.25);
+  text-transform: uppercase;
+}
+.state-name {
+  font-size: clamp(18px, 2.5vw, 28px);
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  margin-top: 5px;
+  transition: color 2s, text-shadow 2s;
+}
+
+/* Particle count */
+#meta {
+  position: fixed;
+  top: 28px; right: 32px;
+  text-align: right;
+  z-index: 20;
+  pointer-events: none;
+}
+.meta-val {
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.18);
+  line-height: 2;
+}
+
+/* AI message overlay */
+#ai-overlay {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.8s;
+  max-width: 600px;
+  width: 90vw;
+}
+#ai-overlay.show { opacity: 1; }
+.ai-directive {
+  font-family: 'EB Garamond', serif;
+  font-style: italic;
+  font-size: clamp(14px, 2vw, 18px);
+  color: rgba(255,255,255,0.7);
+  line-height: 1.7;
+  padding: 16px 24px;
+  border-left: 1px solid rgba(255,255,255,0.2);
+  border-right: 1px solid rgba(255,255,255,0.2);
+}
+.ai-tag {
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.25);
+  margin-top: 10px;
+}
+
+/* Controls */
+#controls {
+  position: fixed;
+  bottom: 28px; left: 32px;
+  z-index: 20;
+  pointer-events: none;
+}
+.ctrl {
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.18);
+  line-height: 2.2;
+  text-transform: uppercase;
+}
+
+/* AI button */
+#ai-btn {
+  position: fixed;
+  bottom: 28px; right: 32px;
+  z-index: 20;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.35);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: all 0.4s;
+  text-transform: uppercase;
+}
+#ai-btn:hover { border-color: rgba(255,255,255,0.5); color: rgba(255,255,255,0.8); }
+#ai-btn:disabled { opacity: 0.2; cursor: not-allowed; }
+
+/* Genesis flash */
+#flash {
+  position: fixed; inset: 0;
+  background: white;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+/* Loading */
+#loading {
+  position: fixed; inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  flex-direction: column;
+  gap: 20px;
+  transition: opacity 1s;
+}
+#loading.hide { opacity: 0; pointer-events: none; }
+.load-title {
+  font-size: clamp(24px, 5vw, 48px);
+  font-weight: 900;
+  letter-spacing: 0.4em;
+  color: white;
+}
+.load-sub {
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: rgba(255,255,255,0.3);
+}
+.load-bar {
+  width: 200px; height: 1px;
+  background: rgba(255,255,255,0.1);
+  position: relative;
+  overflow: hidden;
+}
+.load-bar-fill {
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: white;
+  animation: loadSweep 1.5s ease-in-out forwards;
+}
+@keyframes loadSweep {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="load-title">MORPHOS</div>
+  <div class="load-sub">GENERANDO ORGANISMO ÚNICO</div>
+  <div class="load-bar"><div class="load-bar-fill"></div></div>
+</div>
+
+<canvas id="c"></canvas>
+<div id="cursor"></div>
+<div id="flash"></div>
+
+<div id="state-display">
+  <div class="state-label">∿ estado morfogenético</div>
+  <div class="state-name" id="state-name">NEBULA</div>
+</div>
+
+<div id="meta">
+  <div class="meta-val" id="seed-display">SEMILLA · ∅</div>
+  <div class="meta-val" id="particle-count">PARTÍCULAS · 0</div>
+  <div class="meta-val" id="transform-count">TRANSFORMACIONES · 0</div>
+</div>
+
+<div id="ai-overlay">
+  <div class="ai-directive" id="ai-directive-text"></div>
+  <div class="ai-tag">∿ DIRECTIVA DE INTELIGENCIA ARTIFICIAL</div>
+</div>
+
+<div id="controls">
+  <div class="ctrl">CLICK · ATRAER PARTÍCULAS</div>
+  <div class="ctrl">CLICK DERECHO · REPELER</div>
+  <div class="ctrl">DOBLE CLICK · NUEVA GÉNESIS</div>
+  <div class="ctrl">ESPACIO · IA TRANSFORMA</div>
+</div>
+
+<button id="ai-btn">⟁ IA TRANSFORMA</button>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════════
+// NOISE ENGINE (Perlin 2D)
+// ═══════════════════════════════════════════════════════════
+let SEED = Math.floor(Math.random() * 99999);
+document.getElementById('seed-display').textContent = `SEMILLA · ${SEED}`;
+
+const perm = new Uint8Array(512);
+(function initPerm() {
+  const arr = Array.from({length:256}, (_,i) => i);
+  // Seeded shuffle
+  let s = SEED;
+  function rng() { s = (s * 1664525 + 1013904223) & 0xFFFFFFFF; return (s >>> 0) / 0xFFFFFFFF; }
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  for (let i = 0; i < 512; i++) perm[i] = arr[i & 255];
+})();
+
+function fade(t) { return t*t*t*(t*(t*6-15)+10); }
+function lerp(a,b,t) { return a + t*(b-a); }
+function grad(h, x, y) {
+  switch(h & 3) {
+    case 0: return  x + y;
+    case 1: return -x + y;
+    case 2: return  x - y;
+    default: return -x - y;
+  }
+}
+function noise2(x, y) {
+  const xi = Math.floor(x)&255, yi = Math.floor(y)&255;
+  const xf = x - Math.floor(x), yf = y - Math.floor(y);
+  const u = fade(xf), v = fade(yf);
+  const aa=perm[perm[xi]+yi], ab=perm[perm[xi]+yi+1];
+  const ba=perm[perm[xi+1]+yi], bb=perm[perm[xi+1]+yi+1];
+  return lerp(
+    lerp(grad(aa,xf,yf), grad(ba,xf-1,yf), u),
+    lerp(grad(ab,xf,yf-1), grad(bb,xf-1,yf-1), u),
+    v
+  );
+}
+function fbm(x, y, octaves=4) {
+  let v=0, amp=0.5, freq=1, max=0;
+  for (let i=0; i<octaves; i++) {
+    v += noise2(x*freq, y*freq)*amp;
+    max += amp; amp*=0.5; freq*=2;
+  }
+  return v/max;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CANVAS
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); initParticles(); });
+
+// ═══════════════════════════════════════════════════════════
+// STATES & PALETTES
+// ═══════════════════════════════════════════════════════════
+const STATES = ['NEBULA','VORTEX','CRYSTAL','BLOOM','STORM','NEURAL'];
+
+const PALETTE = {
+  NEBULA:  { h1:195, h2:250, sat:75, lgt:60, bg:'rgba(0,1,8,0.055)',  glow:'rgba(80,160,255,0.04)' },
+  VORTEX:  { h1:275, h2:315, sat:90, lgt:65, bg:'rgba(5,0,10,0.065)', glow:'rgba(180,0,255,0.04)' },
+  CRYSTAL: { h1:175, h2:200, sat:55, lgt:82, bg:'rgba(0,4,10,0.045)', glow:'rgba(0,200,230,0.04)' },
+  BLOOM:   { h1:5,   h2:45,  sat:95, lgt:62, bg:'rgba(6,2,0,0.065)',  glow:'rgba(255,120,0,0.04)' },
+  STORM:   { h1:50,  h2:75,  sat:95, lgt:72, bg:'rgba(4,4,0,0.06)',   glow:'rgba(255,220,0,0.04)' },
+  NEURAL:  { h1:115, h2:150, sat:80, lgt:58, bg:'rgba(0,5,2,0.055)',  glow:'rgba(0,220,100,0.04)' },
+};
+
+const STATE_COLORS = {
+  NEBULA:'#4EA8FF', VORTEX:'#CC44FF', CRYSTAL:'#88EEFF',
+  BLOOM:'#FF8833', STORM:'#FFEE44', NEURAL:'#44FF88'
+};
+
+// Flow field parameters per state
+const FLOW = {
+  NEBULA:  { scale:0.0025, speed:1.0, curl:0.4,  noiseZ:0.0004, offset:0 },
+  VORTEX:  { scale:0.004,  speed:2.2, curl:8.0,  noiseZ:0.001,  offset:100 },
+  CRYSTAL: { scale:0.008,  speed:0.6, curl:0.1,  noiseZ:0.0002, offset:200 },
+  BLOOM:   { scale:0.003,  speed:1.5, curl:2.0,  noiseZ:0.0006, offset:300 },
+  STORM:   { scale:0.006,  speed:3.0, curl:1.5,  noiseZ:0.002,  offset:400 },
+  NEURAL:  { scale:0.005,  speed:1.2, curl:0.8,  noiseZ:0.0003, offset:500 },
+};
+
+let currentState = 'NEBULA';
+let prevState = 'NEBULA';
+let stateBlend = 1.0; // 0 = prev, 1 = current
+let transformCount = 0;
+
+function blendFlow(t) {
+  const a = FLOW[prevState], b = FLOW[currentState];
+  return {
+    scale: lerp(a.scale, b.scale, t),
+    speed: lerp(a.speed, b.speed, t),
+    curl:  lerp(a.curl,  b.curl,  t),
+    noiseZ:lerp(a.noiseZ,b.noiseZ,t),
+    offset:lerp(a.offset,b.offset,t),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════
+// PARTICLES
+// ═══════════════════════════════════════════════════════════
+const N_PARTICLES = 4500;
+const particles = [];
+
+class Particle {
+  constructor() { this.reset(true); }
+
+  reset(random = false) {
+    this.x = random ? Math.random() * W : W/2 + (Math.random()-0.5)*W*0.3;
+    this.y = random ? Math.random() * H : H/2 + (Math.random()-0.5)*H*0.3;
+    this.vx = (Math.random()-0.5)*0.5;
+    this.vy = (Math.random()-0.5)*0.5;
+    this.age = 0;
+    this.maxAge = 180 + Math.random() * 240;
+    this.size = 0.8 + Math.random() * 1.4;
+    this.speed = 0.6 + Math.random() * 1.2;
+    this.hueOffset = (Math.random()-0.5) * 40;
+    this.alpha = 0;
+  }
+
+  update(t, flow, mouse) {
+    this.age++;
+    if (this.age > this.maxAge) { this.reset(); return; }
+
+    // Fade in/out
+    const lifeRatio = this.age / this.maxAge;
+    this.alpha = lifeRatio < 0.1 ? lifeRatio / 0.1
+               : lifeRatio > 0.8 ? (1 - lifeRatio) / 0.2
+               : 1.0;
+    this.alpha *= 0.55;
+
+    // Flow field angle
+    const nx = this.x * flow.scale + flow.offset;
+    const ny = this.y * flow.scale + flow.offset;
+    const nz = t * flow.noiseZ;
+    let angle = fbm(nx, ny + nz, 3) * Math.PI * 4;
+
+    // Curl effect
+    if (flow.curl > 0.1) {
+      const cx = this.x - W/2, cy = this.y - H/2;
+      const r = Math.sqrt(cx*cx + cy*cy) + 0.001;
+      const curlAngle = Math.atan2(cy, cx) + Math.PI/2;
+      angle = lerp(angle, curlAngle, Math.min(flow.curl / (1 + r * 0.003), 0.95));
+    }
+
+    // Crystal state: snap toward grid
+    if (currentState === 'CRYSTAL' && stateBlend > 0.5) {
+      const gs = 60;
+      const gx = Math.round(this.x/gs)*gs;
+      const gy = Math.round(this.y/gs)*gs;
+      const dx = gx - this.x, dy = gy - this.y;
+      this.vx += dx * 0.008 * (stateBlend - 0.5) * 2;
+      this.vy += dy * 0.008 * (stateBlend - 0.5) * 2;
+    }
+
+    // Neural state: seek other particles (simplified via grid hash)
+    if (currentState === 'NEURAL' && stateBlend > 0.6 && Math.random() < 0.01) {
+      const tx = Math.random() * W, ty = Math.random() * H;
+      const dx = tx - this.x, dy = ty - this.y;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if (d < 150) { this.vx += dx/d * 0.3; this.vy += dy/d * 0.3; }
+    }
+
+    // Mouse interaction
+    if (mouse.active) {
+      const dx = mouse.x - this.x, dy = mouse.y - this.y;
+      const d2 = dx*dx + dy*dy;
+      const radius = mouse.mode === 'attract' ? 14000 : 8000;
+      if (d2 < radius && d2 > 1) {
+        const d = Math.sqrt(d2);
+        const force = (mouse.mode === 'attract' ? 1 : -1) * (1 - d2/radius) * 3.5;
+        this.vx += (dx/d) * force;
+        this.vy += (dy/d) * force;
+      }
+    }
+
+    // Apply flow
+    const spd = this.speed * flow.speed;
+    this.vx = lerp(this.vx, Math.cos(angle) * spd, 0.12);
+    this.vy = lerp(this.vy, Math.sin(angle) * spd, 0.12);
+
+    // Damping
+    this.vx *= 0.96;
+    this.vy *= 0.96;
+
+    this.x += this.vx;
+    this.y += this.vy;
+
+    // Wrap
+    if (this.x < -10) this.x = W + 10;
+    else if (this.x > W + 10) this.x = -10;
+    if (this.y < -10) this.y = H + 10;
+    else if (this.y > H + 10) this.y = -10;
+  }
+
+  draw(pal) {
+    if (this.alpha <= 0.01) return;
+    const hue = pal.h1 + (pal.h2 - pal.h1) * ((this.hueOffset + 40) / 80);
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${hue},${pal.sat}%,${pal.lgt}%,${this.alpha})`;
+    ctx.fill();
+
+    // Glow for bright particles
+    if (this.alpha > 0.3 && this.size > 1.5) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * 3, 0, Math.PI*2);
+      ctx.fillStyle = `hsla(${hue},${pal.sat}%,${pal.lgt}%,${this.alpha * 0.08})`;
+      ctx.fill();
+    }
+  }
+}
+
+function initParticles() {
+  particles.length = 0;
+  for (let i = 0; i < N_PARTICLES; i++) particles.push(new Particle());
+  document.getElementById('particle-count').textContent = `PARTÍCULAS · ${N_PARTICLES.toLocaleString()}`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ATTRACTORS (click points)
+// ═══════════════════════════════════════════════════════════
+const attractors = [];
+
+// ═══════════════════════════════════════════════════════════
+// STATE CHANGE
+// ═══════════════════════════════════════════════════════════
+function setState(newState) {
+  if (newState === currentState) return;
+  prevState = currentState;
+  currentState = newState;
+  stateBlend = 0;
+  transformCount++;
+  document.getElementById('transform-count').textContent = `TRANSFORMACIONES · ${transformCount}`;
+
+  const nameEl = document.getElementById('state-name');
+  nameEl.textContent = newState;
+  nameEl.style.color = STATE_COLORS[newState];
+  nameEl.style.textShadow = `0 0 30px ${STATE_COLORS[newState]}55`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MOUSE
+// ═══════════════════════════════════════════════════════════
+const mouse = { x: W/2, y: H/2, active: false, mode: 'attract' };
+const cursor = document.getElementById('cursor');
+
+window.addEventListener('mousemove', e => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top = e.clientY + 'px';
+});
+window.addEventListener('mousedown', e => {
+  if (e.target.id === 'ai-btn') return;
+  mouse.active = true;
+  mouse.mode = e.button === 2 ? 'repel' : 'attract';
+  cursor.className = mouse.mode;
+  // Spawn attractor
+  attractors.push({ x:e.clientX, y:e.clientY, life:1, mode:mouse.mode });
+  if (attractors.length > 8) attractors.shift();
+});
+window.addEventListener('mouseup', () => {
+  mouse.active = false;
+  cursor.className = '';
+});
+window.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('dblclick', genesis);
+
+// ═══════════════════════════════════════════════════════════
+// GENESIS — complete reset
+// ═══════════════════════════════════════════════════════════
+function genesis() {
+  const flash = document.getElementById('flash');
+  flash.style.opacity = '1';
+  setTimeout(() => { flash.style.opacity = '0'; flash.style.transition = 'opacity 1.5s'; }, 50);
+
+  // New seed
+  SEED = Math.floor(Math.random() * 99999);
+  document.getElementById('seed-display').textContent = `SEMILLA · ${SEED}`;
+
+  // Re-init permutation
+  const arr = Array.from({length:256}, (_,i) => i);
+  let s = SEED;
+  function rng() { s=(s*1664525+1013904223)&0xFFFFFFFF; return (s>>>0)/0xFFFFFFFF; }
+  for (let i=255; i>0; i--) { const j=Math.floor(rng()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+  for (let i=0; i<512; i++) perm[i]=arr[i&255];
+
+  // Reset particles
+  initParticles();
+  attractors.length = 0;
+
+  // Random new state
+  const newState = STATES[Math.floor(Math.random() * STATES.length)];
+  setState(newState);
+}
+
+// ═══════════════════════════════════════════════════════════
+// AI TRANSFORMATION
+// ═══════════════════════════════════════════════════════════
+const aiBtn = document.getElementById('ai-btn');
+const aiOverlay = document.getElementById('ai-overlay');
+const aiText = document.getElementById('ai-directive-text');
+let aiCooldown = false;
+
+async function aiTransform() {
+  if (aiCooldown) return;
+  aiCooldown = true;
+  aiBtn.disabled = true;
+  aiBtn.textContent = '∿ PROCESANDO...';
+
+  const otherStates = STATES.filter(s => s !== currentState);
+  const prompt = `Eres el director de una obra de arte generativo llamada MORPHOS. Actualmente está en estado "${currentState}". Los otros estados posibles son: ${otherStates.join(', ')}.
+
+Responde SOLAMENTE con un JSON válido con este formato exacto (sin markdown, sin explicación):
+{
+  "nextState": "NOMBRE_DEL_ESTADO",
+  "directive": "Una frase poética en español (máximo 20 palabras) describiendo la transformación que está ocurriendo. Ej: Los cristales se disuelven en un torbellino de energía pura."
+}
+
+Elige el siguiente estado con intención artística. La frase debe ser evocadora y cinematográfica.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const raw = data.content?.find(b => b.type==='text')?.text || '{}';
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    const nextState = STATES.includes(parsed.nextState) ? parsed.nextState : otherStates[Math.floor(Math.random()*otherStates.length)];
+    const directive = parsed.directive || 'La transformación comienza...';
+
+    setState(nextState);
+    showDirective(directive);
+  } catch(e) {
+    // Fallback
+    const nextState = otherStates[Math.floor(Math.random()*otherStates.length)];
+    setState(nextState);
+    showDirective('La inteligencia dirige la metamorfosis.');
+  }
+
+  setTimeout(() => {
+    aiCooldown = false;
+    aiBtn.disabled = false;
+    aiBtn.textContent = '⟁ IA TRANSFORMA';
+  }, 5000);
+}
+
+function showDirective(text) {
+  aiText.textContent = text;
+  aiOverlay.classList.add('show');
+  setTimeout(() => aiOverlay.classList.remove('show'), 5000);
+}
+
+aiBtn.addEventListener('click', aiTransform);
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); aiTransform(); }
+});
+
+// ═══════════════════════════════════════════════════════════
+// MAIN LOOP
+// ═══════════════════════════════════════════════════════════
+let t = 0;
+let lastRAF = 0;
+
+function loop(ts) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(ts - lastRAF, 50) / 16;
+  lastRAF = ts;
+
+  // Blend state transition
+  if (stateBlend < 1) stateBlend = Math.min(1, stateBlend + 0.008 * dt);
+
+  const flow = blendFlow(stateBlend);
+  const pal = PALETTE[currentState];
+  const prevPal = PALETTE[prevState];
+  const blendPal = {
+    h1: lerp(prevPal.h1, pal.h1, stateBlend),
+    h2: lerp(prevPal.h2, pal.h2, stateBlend),
+    sat: lerp(prevPal.sat, pal.sat, stateBlend),
+    lgt: lerp(prevPal.lgt, pal.lgt, stateBlend),
+  };
+
+  // Background fade (trailing effect)
+  ctx.fillStyle = pal.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Center glow
+  const cg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.min(W,H)*0.5);
+  cg.addColorStop(0, pal.glow);
+  cg.addColorStop(1, 'transparent');
+  ctx.fillStyle = cg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw attractor halos
+  for (let i = attractors.length-1; i >= 0; i--) {
+    const a = attractors[i];
+    a.life -= 0.008 * dt;
+    if (a.life <= 0) { attractors.splice(i,1); continue; }
+    const r = (1 - a.life) * 80;
+    const g2 = ctx.createRadialGradient(a.x, a.y, 0, a.x, a.y, r);
+    const col = a.mode === 'attract' ? '0,229,255' : '255,60,60';
+    g2.addColorStop(0, `rgba(${col},${a.life*0.15})`);
+    g2.addColorStop(1, 'transparent');
+    ctx.fillStyle = g2;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // Particles
+  for (const p of particles) {
+    p.update(t, flow, mouse);
+    p.draw(blendPal);
+  }
+
+  t += 0.5 * dt;
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+initParticles();
+
+// Set initial state display
+const nameEl = document.getElementById('state-name');
+nameEl.style.color = STATE_COLORS['NEBULA'];
+nameEl.style.textShadow = `0 0 30px ${STATE_COLORS['NEBULA']}55`;
+
+// Hide loading after 1.6s
+setTimeout(() => {
+  document.getElementById('loading').classList.add('hide');
+  setTimeout(() => document.getElementById('loading').remove(), 1000);
+}, 1600);
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
